@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Offline Vault</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				max-width: 900px;
+				margin: 40px auto;
+				padding: 20px;
+				background: #f5f5f5;
+			}
+			h1 {
+				margin-bottom: 5px;
+			}
+			.box {
+				background: white;
+				padding: 20px;
+				border-radius: 8px;
+				margin-bottom: 20px;
+				box-shadow: 0 2px 8px rgba(0,0,0,.08);
+			}
+			label {
+				display: block;
+				font-weight: bold;
+				margin-top: 12px;
+			}
+			input {
+				width: 100%;
+				box-sizing: border-box;
+				padding: 10px;
+				margin-top: 6px;
+				font-family: monospace;
+				border: 1px solid #bbb;
+				border-radius: 4px;
+			}
+			button {
+				padding: 10px 18px;
+				margin: 5px 8px 0 0;
+				cursor: pointer;
+				border: 0;
+				border-radius: 4px;
+				background: #333;
+				color: white;
+			}
+			button:hover {
+				background: #555;
+			}
+			#status {
+				margin-top: 15px;
+				font-weight: bold;
+			}
+			.info {
+				font-size: 14px;
+				color: #555;
+			}
+			.warning {
+				color: #9a5700;
+			}
+			.flexbox{
+				display:flex;
+			}
+			.btn-secondary{
+				background-color: #8b0808;
+			}
+			#hash{
+				width: 20px;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Offline Vault</h1>
+		<p class="info">AES-256-GCM · PBKDF2-SHA-256 · 256-Bit-Salt · 96-Bit-IV</p>
+		<div class="box">
+			<label for="password">Master password</label>
+			<input id="password" type="password" autocomplete="off" spellcheck="false">
+			<div class="flexbox">
+				<div style="width:50%">
+					<label for="plaintextInput">Plaintext</label>
+					<input id="plaintextInput" type="text" autocomplete="off" spellcheck="false">
+					<button onclick="encryptData()">Encrypt</button>
+					<label for="ciphertextOutput">Ciphertext</label>
+					<input id="ciphertextOutput" type="text" autocomplete="off" spellcheck="false">
+					<button onclick="copyCiphertext()">Copy</button>
+				</div>
+				<div style="width:50%">
+					<label for="ciphertextInput">Ciphertext</label>
+					<input id="ciphertextInput" type="text" autocomplete="off" spellcheck="false">
+					<button onclick="decryptData()">Decrypt</button>
+					<label for="plaintextOutput">Plaintext</label>
+					<input id="plaintextOutput" type="text" autocomplete="off" spellcheck="false">
+					<button onclick="copyPlaintext()">Copy</button>
+				</div>
+			</div>
+			<div id="status"></div>
+		</div>
+		<div class="box">
+			<strong>Information</strong>
+			<p class="info">
+				The salt and the IV are saved together with the Ciphertext. They don't have to be secret.
+			</p>
+			<p class="info">
+				For every encryption a new salt and IV is being used. That's why the same plaintext and master password generate a new ciphertext every time.
+			</p>
+		</div>
+		<script>
+			/*
+			==========================================================
+				Offline Vault V3
+			==========================================================
+			Kryptografie:
+				Password
+					|
+					v
+				PBKDF2-HMAC-SHA-256
+					|
+					| iterations
+					v
+				256 Bit AES Key
+					|
+					v
+				AES-256-GCM
+					|
+					+-- random 96 bit IV
+					|
+					+-- random 256 bit Salt
+			Format:
+				ITERATIONS.SALT.IV.CIPHERTEXT
+
+			All binary parts are base64-encoded.
+			Example:
+				3000000.<salt>.<iv>.<ciphertext>
+			Iterations are part of the result, to decrypt ciphertexts, even
+			if the iterations default value got adjusted.
+			==========================================================
+			*/
+			/*
+			 * -------------------------------------------------------
+			 * Current default value for new encryptions
+			 * -------------------------------------------------------
+			 */
+			const DEFAULT_PBKDF2_ITERATIONS = 600000;
+			/*
+			 * AES-256-GCM
+			 */
+			const AES_KEY_LENGTH = 256;
+			/*
+			 * Salt = 32 Byte = 256 Bit
+			 */
+			const SALT_LENGTH = 32;
+			/*
+			 * GCM IV = 12 Byte = 96 Bit
+			 */
+			const IV_LENGTH = 12;
+			/*
+			 * -------------------------------------------------------
+			 * Base64
+			 * -------------------------------------------------------
+			 */
+			async function sha256(text) {
+				const data = new TextEncoder().encode(text);
+				const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+
+				return [...new Uint8Array(hashBuffer)]
+					.map(b => b.toString(16).padStart(2, "0"))
+					.join("");
+			}			
+			function toBase64(bytes) {
+				let binary = "";
+				const chunkSize = 0x8000;
+				for (let i = 0; i < bytes.length; i += chunkSize) {
+					const chunk =
+						bytes.subarray(
+							i,
+							Math.min(
+								i + chunkSize,
+								bytes.length
+							)
+						);
+					binary += String.fromCharCode(...chunk);
+				}
+				return btoa(binary);
+			}
+			function fromBase64(base64) {
+				const binary = atob(base64);
+				const bytes = new Uint8Array(binary.length);
+				for (
+					let i = 0;
+					i < binary.length;
+					i++
+				) {
+					bytes[i] = binary.charCodeAt(i);
+				}
+				return bytes;
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Password → AES-Key
+			 * -------------------------------------------------------
+			 */
+			async function deriveKey(password, salt, iterations) {
+				const passwordBytes = new TextEncoder().encode(password);
+				const keyMaterial =
+					await crypto.subtle.importKey(
+						"raw",
+						passwordBytes,
+						{
+							name: "PBKDF2"
+						},
+						false,
+						[
+							"deriveKey"
+						]
+					);
+				/*
+				 * PBKDF2 → AES-256
+				 */
+				return crypto.subtle.deriveKey(
+					{
+						name: "PBKDF2",
+						salt: salt,
+						iterations: iterations,
+						hash: "SHA-256"
+					},
+					keyMaterial,
+					{
+						name: "AES-GCM",
+						length: AES_KEY_LENGTH
+					},
+					false,
+					[
+						"encrypt",
+						"decrypt"
+					]
+				);
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Status
+			 * -------------------------------------------------------
+			 */
+			function setStatus(message, error = false) {
+				const element = document.getElementById("status");
+				element.textContent = message;
+				element.style.color = error ? "#b00020" : "#146b2e";
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Encryption
+			 * -------------------------------------------------------
+			 */
+			async function encryptData() {
+				try {
+					const password = document.getElementById("password").value;
+					const plaintext = document.getElementById("plaintextInput").value;
+					clearAll();
+					setStatus("Encryption is starting...");
+					
+					if (!password) {
+						setStatus("Master password is missing.", true);
+						return;
+					}
+					if (!plaintext) {
+						setStatus("Plaintext is missing.", true);
+						return;
+					}
+					const iterations = DEFAULT_PBKDF2_ITERATIONS;
+					/*
+					 * Random 256-Bit-Salt.
+					 */
+					const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+					/*
+					 * Random 96-Bit-IV.
+					 *
+					 * Each encryption gets its own IV.
+					 */
+					const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+					/*
+					 * Get key
+					 */
+					const key = await deriveKey(password, salt, iterations);
+					/*
+					 * Plaintext → UTF-8
+					 */
+					const plaintextBytes = new TextEncoder().encode(plaintext);
+					/*
+					 * AES-256-GCM
+					 */
+					const encrypted =
+						await crypto.subtle.encrypt(
+							{
+								name: "AES-GCM",
+								iv: iv,
+								tagLength: 128
+							},
+							key,
+							plaintextBytes
+						);
+						
+					const result =
+						iterations +
+						"." +
+						toBase64(salt) +
+						"." +
+						toBase64(iv) +
+						"." +
+						toBase64(
+							new Uint8Array(
+								encrypted
+							)
+						);
+					document.getElementById("ciphertextOutput").value = result;
+					setStatus("Encryption successful.");
+				}
+				catch (error) {
+					console.error(error);
+					setStatus("Encryption failed.", true);
+				}
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Decryption
+			 * -------------------------------------------------------
+			 */
+			async function decryptData() {
+				try {
+					const password = document.getElementById("password").value;
+					const input = document.getElementById("ciphertextInput").value.trim();
+					clearAll();
+					setStatus("Decryption is starting...");
+					if (!password) {
+						setStatus("Master password is missing.", true);
+						return;
+					}
+					/*
+					 * Split:
+					 *
+					 * ITERATIONS
+					 * SALT
+					 * IV
+					 * CIPHERTEXT
+					 */
+					const parts = input.split(".");
+					if (parts.length !== 4) {
+						setStatus("Invalid ciphertext.", true);
+						return;
+					}
+					/*
+					 * Get number of iterations from encrypted text.
+					 */
+					const iterations = Number(parts[0]);
+					if (!Number.isSafeInteger(iterations)) {
+						setStatus("Invalid PBKDF2 iterations.", true);
+						return;
+					}
+					/*
+					 * Salt
+					 */
+					const salt = fromBase64(parts[1]);
+					/*
+					 * IV
+					 */
+					const iv = fromBase64(parts[2]);
+					/*
+					 * Ciphertext + authentication tag
+					 */
+					const encrypted = fromBase64(parts[3]);
+					/*
+					 * Check Salt-Length
+					 */
+					if (salt.length !== SALT_LENGTH) {
+						setStatus("Invalid salt.", true);
+						return;
+					}
+					/*
+					 * Check IV-length
+					 */
+					if (iv.length !== IV_LENGTH) {
+						setStatus("Invalid IV.", true);
+						return;
+					}
+					/*
+					 * AES-GCM needs at least 128-Bit Authentication Tag.
+					 *
+					 * Since Web Crypto adds the tag to the ciphertext, 
+					 * there have to be at least 16 bytes.
+					 */
+					if (encrypted.length < 16) {
+						setStatus("Invalid Ciphertext.", true);
+						return;
+					}
+					
+					const key =
+						await deriveKey(
+							password,
+							salt,
+							iterations
+						);
+				
+					const decrypted =
+						await crypto.subtle.decrypt(
+							{
+								name: "AES-GCM",
+								iv: iv,
+								tagLength: 128
+							},
+							key,
+							encrypted
+						);
+					/*
+					 * UTF-8 → Text
+					 */
+					const plaintext = new TextDecoder("utf-8", { fatal: true }).decode(decrypted);
+					document.getElementById("plaintextOutput").value = plaintext;
+					setStatus("Decryption successful.");
+				}
+				catch (error) {
+					console.error(error);
+					setStatus("Decryption failed.", true);
+				}
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Copy ciphertext
+			 * -------------------------------------------------------
+			 */
+			async function copyCiphertext() {
+				const element = document.getElementById("ciphertextOutput");
+				if (!element.value) {
+					setStatus("No encrypted ciphertext found.", true);
+					return;
+				}
+				try {
+					await navigator.clipboard.writeText(element.value);
+					setStatus("Ciphertext copied.");
+				}
+				catch (error) {
+					element.select();
+					document.execCommand("copy");
+					setStatus("Ciphertext copied.");
+				}
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Copy plaintext
+			 * -------------------------------------------------------
+			 */
+			async function copyPlaintext() {
+				const element = document.getElementById("plaintextOutput");
+				if (!element.value) {
+					setStatus("No decrypted plaintext found.", true);
+					return;
+				}
+				try {
+					await navigator.clipboard.writeText(element.value);
+					setStatus("Plaintext copied.");
+				}
+				catch (error) {
+					element.select();
+					document.execCommand("copy");
+					setStatus("Plaintext copied.");
+				}
+			}
+			/*
+			 * -------------------------------------------------------
+			 * Clear all
+			 * -------------------------------------------------------
+			 */
+			function clearAll() {
+				document.getElementById("password").value = "";
+				document.getElementById("plaintextInput").value = "";
+				document.getElementById("plaintextOutput").value = "";
+				document.getElementById("ciphertextInput").value = "";
+				document.getElementById("ciphertextOutput").value = "";
+				document.getElementById("hash").textContent = "";
+				setStatus("");
+			}
+		</script>
+	</body>
+</html>
