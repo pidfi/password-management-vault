@@ -214,7 +214,7 @@
 						 * Current default value for new encryptions
 						 * -------------------------------------------------------
 						 */
-						const DEFAULT_PBKDF2_ITERATIONS = 600000 * 5;
+						const DEFAULT_PBKDF2_ITERATIONS = 600000;
 						/*
 						 * AES-256-GCM
 						 */
@@ -477,7 +477,7 @@
 									setStatus("Invalid Ciphertext.", true);
 									return;
 								}
-								let key = await deriveKey(passwordBytes, salt, iterations);
+								key = await deriveKey(passwordBytes, salt, iterations);
 								passwordBytes.fill(0);
 								const decryptedBuffer = await crypto.subtle.decrypt(
 									{ 
@@ -529,10 +529,10 @@
 								await navigator.clipboard.writeText(element.value);
 								setStatus("Ciphertext copied.");
 							} catch (error) {
-								element.select();
-								document.execCommand("copy");
-								setStatus("Ciphertext copied.");
-							}
+							    element.select();
+							    const success = document.execCommand("copy");
+							    setStatus(success ? "Ciphertext copied." : "Copy failed. Please copy manually.", !success);
+						    }
 						}
 						/*
 						 * -------------------------------------------------------
@@ -549,10 +549,10 @@
 								await navigator.clipboard.writeText(element.value);
 								setStatus("Plaintext copied.");
 							} catch (error) {
-								element.select();
-								document.execCommand("copy");
-								setStatus("Plaintext copied.");
-							}
+							    element.select();
+							    const success = document.execCommand("copy");
+							    setStatus(success ? "Plaintext copied." : "Copy failed. Please copy manually.", !success);
+						    }
 						}
 						/*
 						 * -------------------------------------------------------
