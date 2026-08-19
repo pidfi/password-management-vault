@@ -43,7 +43,7 @@
         <script>
             let selectedFile = null;
             let objectUrl = null;
-			const expectedHash = "f9dc09b615c9efef29feef20b376b89251eee5354628eefbdd5a60c0ae138383";
+			const expectedHash = "ed165d88ee297dfd62b9c4dfaffb5e99de1c1e6faa588cbf11191d38836bd1d1";
             const dropZone = document.getElementById("dropZone");
             dropZone.addEventListener("dragover", (e) => {
                 dropZone.classList.add("dragover");
@@ -74,11 +74,15 @@
 					document.getElementById("open").disabled = false;
 				}
             });
-            function openSelectedFile() {
-                if (!selectedFile) return;
-                const objectUrl = URL.createObjectURL(selectedFile);
-                window.location.href = objectUrl;
-            }
+            async function openSelectedFile() {
+				if (!selectedFile) return;
+				const bytes = await selectedFile.arrayBuffer();
+				const bytesView = new Uint8Array(bytes);
+				const html = new TextDecoder().decode(bytesView);
+				document.open();
+				document.write(html);
+				document.close();
+			}
 			const wordlist = [
 				"abandon",
 				"ability",

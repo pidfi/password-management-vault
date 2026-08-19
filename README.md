@@ -76,8 +76,8 @@ Does the hosted file match
                    NO            YES (only then the "Open file" button becomes clickable)
                     │             │
                   STOP            ▼
-                          Open exact verified
-                            bytes as a Blob
+                          Open verified 
+						 content of file
                                   │
                                   ▼
                           Enter master password
@@ -105,7 +105,7 @@ and:
 
 > **The hosted checker never gets to choose what is ultimately executed.**
 
-The local checker is different: once the local checker itself has been independently verified, it may open the **exact bytes it has just hashed** as a Blob.
+The local checker is different: once the local checker itself has been independently verified, it may open the verified content of `encrypt_decrypt.html`.
 
 ---
 
@@ -231,7 +231,7 @@ The hosted checker therefore has no role in executing the application that will 
 
 The local hash checker is opened directly from local storage after its known-good fingerprint has been verified by the hosted checker.
 
-Unlike the hosted checker, the local checker may provide an **"Open as Blob"** function.
+Unlike the hosted checker, the local checker may provide an **"Open file"** function.
 
 The local checker is trusted for this purpose because:
 
@@ -241,9 +241,7 @@ The local checker is trusted for this purpose because:
 4. it independently hashes the selected `encrypt_decrypt.html` file and compares its actual hash against that expected value;
 5. only after the hash matches does the user confirm the displayed fingerprint.
 
-The local checker should hash the file and retain the **same bytes that were hashed**.
-
-After the expected hash has been successfully verified and the user confirms the fingerprint, those exact verified bytes can be used to construct the Blob.
+After the expected hash has been successfully verified and the user confirms the fingerprint, those exact verified bytes can be used to construct the content of `encrypt_decrypt.html`.
 
 This ensures that the file which is opened is the same file whose integrity was checked, rather than fetching or reading the file again after verification.
 
@@ -251,38 +249,40 @@ This ensures that the file which is opened is the same file whose integrity was 
 Local encrypt_decrypt.html
           │
           ▼
-       Read bytes
+    Read file once
           │
-          ├──────────────┐
-          │              │
-          ▼              ▼
-       SHA-256          bytes
-          │              │
-          ▼              │
- Hash verification       │
-          │              │
-          ▼              │
-       MATCH ────────────┘
-                         │
-                         ▼
-                    Create Blob
-                         │
-                         ▼
-                   Execute Blob
+          ├──────────────────────┐
+          │                      │
+          ▼                      ▼
+       SHA-256              Same bytes
+          │                      │
+          ▼                      │
+ Hash verification               │
+          │                      │
+          ▼                      │
+       MATCH ────────────────────┘
+                                 │
+                                 ▼
+							document.open()
+							document.write(decodedBytes)
+							document.close()
 ```
 
 Conceptually:
 
 ```javascript
-    function openSelectedFile() {
-        if (!selectedFile) return;
-
-        const objectUrl = URL.createObjectURL(selectedFile);
-        window.location.href = objectUrl;
-    }
+	async function openSelectedFile() {
+		if (!selectedFile) return;
+		const bytes = await selectedFile.arrayBuffer();
+		const bytesView = new Uint8Array(bytes);
+		const html = new TextDecoder().decode(bytesView);
+		document.open();
+		document.write(html);
+		document.close();
+	}
 ```
 
-The important property is that the Blob is created from the **same bytes that were hashed**.
+The important property is that the HTML is created from the **same bytes that were hashed before**.
 
 The local checker must not hash one copy and subsequently fetch or open a different copy from a server.
 
@@ -321,7 +321,7 @@ A short fingerprint should not be confused with the full cryptographic hash. It 
 
 # 6. Decryption
 
-Once the local `encrypt_decrypt.html` has been independently verified, the local checker can open the exact verified bytes as a Blob.
+Once the local `encrypt_decrypt.html` has been independently verified, the local checker can open the exact verified bytes.
 
 The application is self-contained and does not need a password-manager server.
 
@@ -410,7 +410,7 @@ The local checker verifies the actual decryption application before it is execut
 
 It is itself verified by the hosted checker first.
 
-The local checker may open the decryption application as a Blob, but only from the **same bytes it has just hashed**.
+The local checker may open the decryption application, but only from the **same bytes it has just hashed**.
 
 It should not silently retrieve a replacement version from the network.
 
