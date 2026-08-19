@@ -214,7 +214,7 @@
 						 * Current default value for new encryptions
 						 * -------------------------------------------------------
 						 */
-						const DEFAULT_PBKDF2_ITERATIONS = 600000;
+						const DEFAULT_PBKDF2_ITERATIONS = 600000 * 5;
 						/*
 						 * AES-256-GCM
 						 */
@@ -304,13 +304,18 @@
 						 * -------------------------------------------------------
 						 */
 						async function encryptData() {
+						    let passwordBytes = null;
+							let plaintextBytes = null;
+							let salt = null;
+							let iv = null;
+							let key = null;
 							try {
 								const passwordEl = document.getElementById("password");
 								const plaintextEl = document.getElementById("plaintextInput");
 								
 								// Convert to Uint8Array immediately and clear DOM to prevent lingering strings
-								const passwordBytes = new TextEncoder().encode(passwordEl.value);
-								const plaintextBytes = new TextEncoder().encode(plaintextEl.value);
+								passwordBytes = new TextEncoder().encode(passwordEl.value);
+								plaintextBytes = new TextEncoder().encode(plaintextEl.value);
 								clearAll();
 								setStatus("Encryption is starting...");
 								
@@ -330,17 +335,17 @@
 								/*
 								 * Random 256-Bit-Salt.
 								 */
-								const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+								salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
 								/*
 								 * Random 96-Bit-IV.
 								 *
 								 * Each encryption gets its own IV.
 								 */
-								const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+								iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
 								/*
 								 * Get key
 								 */
-								const key = await deriveKey(passwordBytes, salt, iterations);
+								key = await deriveKey(passwordBytes, salt, iterations);
 								passwordBytes.fill(0); // Scrub password from memory
 								/*
 								 * AES-256-GCM
@@ -373,17 +378,15 @@
 							} finally {
 								// Scrub all sensitive data
 								if (passwordBytes) passwordBytes.fill(0);
+								if (plaintextBytes) plaintextBytes.fill(0);
 								if (salt) salt.fill(0);
 								if (iv) iv.fill(0);
-								if (encryptedBytes) encryptedBytes.fill(0);
-								if (plaintextBytes) plaintextBytes.fill(0);
+								
 								key = null;
 								passwordBytes = null;
+								plaintextBytes = null;
 								salt = null;
 								iv = null;
-								encryptedBytes = null;
-								plaintextBytes = null;
-								parts = null;
 							}
 						}
 						/*
@@ -392,11 +395,17 @@
 						 * -------------------------------------------------------
 						 */
 						async function decryptData() {
+							let passwordBytes = null;
+							let salt = null;
+							let iv = null;
+							let encryptedBytes = null;
+							let plaintextBytes = null;
+							let key = null;
 							try {
 								const passwordEl = document.getElementById("password");
 								const ciphertextEl = document.getElementById("ciphertextInput");
 								
-								const passwordBytes = new TextEncoder().encode(passwordEl.value);
+								passwordBytes = new TextEncoder().encode(passwordEl.value);
 								const input = ciphertextEl.value.trim();
 								clearAll();
 								setStatus("Decryption is starting...");
@@ -432,15 +441,15 @@
 								/*
 								 * Salt
 								 */
-								const salt = fromBase64(parts[1]);
+								salt = fromBase64(parts[1]);
 								/*
 								 * IV
 								 */
-								const iv = fromBase64(parts[2]);
+								iv = fromBase64(parts[2]);
 								/*
 								 * Ciphertext + authentication tag
 								 */
-								const encryptedBytes = fromBase64(parts[3]);
+								encryptedBytes = fromBase64(parts[3]);
 								/*
 								 * Check Salt-Length
 								 */
@@ -468,7 +477,7 @@
 									setStatus("Invalid Ciphertext.", true);
 									return;
 								}
-								const key = await deriveKey(passwordBytes, salt, iterations);
+								let key = await deriveKey(passwordBytes, salt, iterations);
 								passwordBytes.fill(0);
 								const decryptedBuffer = await crypto.subtle.decrypt(
 									{ 
@@ -479,7 +488,7 @@
 									key,
 									encryptedBytes
 								);
-								const plaintextBytes = new Uint8Array(decryptedBuffer);
+								plaintextBytes = new Uint8Array(decryptedBuffer);
 								/*
 								 * UTF-8 → Text
 								 */
@@ -503,7 +512,6 @@
 								iv = null;
 								encryptedBytes = null;
 								plaintextBytes = null;
-								parts = null;
 							}
 						}
 						/*
