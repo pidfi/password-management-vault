@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
         <title>SHA256 Hash Checker</title>
         <style>
             body {
@@ -43,7 +44,7 @@
         <script>
             let selectedFile = null;
             let objectUrl = null;
-			const expectedHash = "1d62611f28b006943dbe25f1c9a002158a3889412afd6c0fba0092bbf50e0c48";
+			const expectedHash = "9eba5bb395cc8f903c3f11d13f247aaa83a3b44d272707f4164891092b0897e8";
             const dropZone = document.getElementById("dropZone");
             dropZone.addEventListener("dragover", (e) => {
                 dropZone.classList.add("dragover");

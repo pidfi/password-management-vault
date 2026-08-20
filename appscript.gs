@@ -4,7 +4,7 @@ function checkWebsites() {
 
   const rowNumber = 2;
   const url = "YOUR_WEBSITE_URL_THAT_SERVES_THE_HASH_CHECKER";
-  const oldHash = "YOUR_TRUSTED_HASH_OF_HASH_CHECKER"; // if unchanged: fa55c627724851da339b0dfa6c62993179d62406f1d658c78ecb10581e4e74e0
+  const oldHash = "YOUR_TRUSTED_HASH_OF_HASH_CHECKER"; // if unchanged: 718e8d588506436a32415c682bcde611c97ba922e43082566a301a068b93cda7
 
   try {
     const response = UrlFetchApp.fetch(url, {
