@@ -3,8 +3,8 @@ function checkWebsites() {
   let sheet = spreadsheet.getSheetByName('hash_checker');
 
   const rowNumber = 2;
-  const url = "YOUR_WEBSITE_URL_THAT_SERVES_THE_HASH_CHECKER";
-  const oldHash = "YOUR_TRUSTED_HASH_OF_HASH_CHECKER"; // if unchanged: 718e8d588506436a32415c682bcde611c97ba922e43082566a301a068b93cda7
+  const url = "YOUR_WEBSITE_URL_THAT_SERVES_THE_HOSTED_HASH_CHECKER";
+  const oldHash = "YOUR_TRUSTED_HASH_OF_HOSTED_HASH_CHECKER"; // if unchanged: 042d9c9ac9ae8a72614b54a488dccf19ca48e3cddf41124008becc99d1d7fce0
 
   try {
     const response = UrlFetchApp.fetch(url, {

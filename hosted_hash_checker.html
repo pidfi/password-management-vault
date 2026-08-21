@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
+		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Dqu8a/Dsbap9WNgTrynFrZLSsOxIJTUKUXcz2elNQpY='; style-src 'sha256-G4o/IGXLTZLstIYIMkO76UpcFwMei4spHqOp6hE8/zI='; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
         <title>SHA256 Hash Checker</title>
         <style>
             body {
@@ -41,8 +41,7 @@
             <pre id="hashPhrase"></pre>
         </div>
         <script>
-            let selectedFile = null;
-            let objectUrl = null;
+            let verifiedBytes = null;
             const dropZone = document.getElementById("dropZone");
             dropZone.addEventListener("dragover", (e) => {
                 dropZone.classList.add("dragover");
@@ -54,12 +53,13 @@
                 dropZone.classList.remove("dragover");
             });
             document.getElementById("dropZone").addEventListener("change", async (event) => {
-                selectedFile = event.target.files[0];
+                let selectedFile = event.target.files[0];
                 if (!selectedFile) return;
                 document.getElementById("name").textContent =
                     "File: " + selectedFile.name;
                 const data = await selectedFile.arrayBuffer();
-                const digest = await crypto.subtle.digest("SHA-256", data);
+				verifiedBytes = new Uint8Array(data);
+                const digest = await crypto.subtle.digest("SHA-256", verifiedBytes);
                 const hash = [...new Uint8Array(digest)]
                     .map(b => b.toString(16).padStart(2, "0"))
                     .join("");

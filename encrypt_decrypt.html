@@ -43,34 +43,52 @@
         .btn-primary:hover { 
 			background: #555; 
 		}
+		.btn-clipboard { 
+			background: #bbb; 
+		}
+        .btn-clipboard:hover { 
+			background: #ccc; 
+		}
         #iframe-container iframe {
             width: 100vw;
 			height: 80vh;
             border: none;
             display: block;
         }
+		p {
+			font-size: 18px;
+		}
+		#unlocked-state{
+			display: none;
+		}
+		#xToCopy{
+			position:fixed;
+			left: -1000px;
+			top: 0px;
+			width: 1px;
+			height: 1px;
+			opacity: 0;
+		}
     </style>
 </head>
-<body>   
+<body>
+	<textarea id="xToCopy">x</textarea>   
 	<div id="locked-state" class="statebox">
 		<div>
-			<p style="font-size: 18px;">The vault is currently locked. No sensitive data is in memory.</p>
-			<button onclick="unlockVault()" class="btn btn-primary">Unlock Vault</button>
+			<p>The vault is currently locked. No sensitive data is in memory.</p>
+			<button id="unlockVault" class="btn btn-primary">Unlock Vault</button>
+			<button id="copyXtoClipboard" class="btn btn-clipboard">Copy 'x' to clipboard</button>
 		</div>
 	</div>
 	
-	<div id="unlocked-state" class="statebox" style="display: none;">
+	<div id="unlocked-state" class="statebox">
 		<div>
-			<button onclick="lockVault()" class="btn btn-danger">Lock Vault</button>
+			<button id="lockVault" class="btn btn-danger">Lock Vault</button>
 			<div id="iframe-container"></div>
 		</div>
 	</div>
 
     <script>
-        const iframeContainer = document.getElementById('iframe-container');
-        const lockedState = document.getElementById('locked-state');
-        const unlockedState = document.getElementById('unlocked-state');
-
         // The entire vault application logic and UI, isolated in a string.
         // This ensures the JS heap is completely separate from the parent page.
         const vaultAppHTML = `
@@ -79,6 +97,7 @@
 				<head>
 					<meta charset="UTF-8">
 					<meta name="viewport" content="width=device-width, initial-scale=1.0">
+					<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/R9uDVyHJKMokeYObT2SdufiPBurBzzAVXNQ0mBoDmI='; style-src 'sha256-R0KyXyWfnAswDkQK+V2NyEFqUy7HyrnGR+JJ16OXsQA='; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
 					<title>Offline Vault</title>
 					<style>
 						body {
@@ -140,6 +159,9 @@
 						.btn-secondary{
 							background-color: #8b0808;
 						}
+						.half-width{
+							width: 50%;
+						}
 					</style>
 				</head>
 				<body>
@@ -150,21 +172,21 @@
 							<label for="password">Master password</label>
 							<input id="password" type="password" autocomplete="off" spellcheck="false">
 							<div class="flexbox">
-								<div style="width:50%">
+								<div class="half-width">
 									<label for="plaintextInput">Plaintext</label>
 									<input id="plaintextInput" type="text" autocomplete="off" spellcheck="false">
-									<button onclick="encryptData()">Encrypt</button>
+									<button id="encryptData">Encrypt</button>
 									<label for="ciphertextOutput">Ciphertext</label>
 									<input id="ciphertextOutput" type="text" autocomplete="off" spellcheck="false">
-									<button onclick="copyCiphertext()">Copy</button>
+									<button id="copyCiphertext">Copy</button>
 								</div>
-								<div style="width:50%">
+								<div class="half-width">
 									<label for="ciphertextInput">Ciphertext</label>
 									<input id="ciphertextInput" type="text" autocomplete="off" spellcheck="false">
-									<button onclick="decryptData()">Decrypt</button>
+									<button id="decryptData">Decrypt</button>
 									<label for="plaintextOutput">Plaintext</label>
 									<input id="plaintextOutput" type="text" autocomplete="off" spellcheck="false">
-									<button onclick="copyPlaintext()">Copy</button>
+									<button id="copyPlaintext">Copy</button>
 								</div>
 							</div>
 							<div id="status"></div>
@@ -250,6 +272,15 @@
 							}
 							return bytes;
 						}
+						/*
+						 * -------------------------------------------------------
+						 * Buttons
+						 * -------------------------------------------------------
+						 */
+						document.getElementById("encryptData").addEventListener("click", encryptData);
+						document.getElementById("decryptData").addEventListener("click", decryptData);
+						document.getElementById("copyPlaintext").addEventListener("click", copyPlaintext);
+						document.getElementById("copyCiphertext").addEventListener("click", copyCiphertext);
 						/*
 						 * -------------------------------------------------------
 						 * Password → AES-Key
@@ -528,11 +559,18 @@
 							}
 							try {
 								await navigator.clipboard.writeText(element.value);
+								clearAll();
 								setStatus("Ciphertext copied.");
 							} catch (error) {
 							    element.select();
+								element.setSelectionRange(0, element.value.length);
 							    const success = document.execCommand("copy");
-							    setStatus(success ? "Ciphertext copied." : "Copy failed. Please copy manually.", !success);
+							    if(success){
+									clearAll();
+									setStatus("Ciphertext copied.");
+								}else{
+									setStatus("Copy failed. Please copy manually.");
+								}
 						    }
 						}
 						/*
@@ -548,11 +586,18 @@
 							}
 							try {
 								await navigator.clipboard.writeText(element.value);
+								clearAll();
 								setStatus("Plaintext copied.");
 							} catch (error) {
 							    element.select();
+								element.setSelectionRange(0, element.value.length);
 							    const success = document.execCommand("copy");
-							    setStatus(success ? "Plaintext copied." : "Copy failed. Please copy manually.", !success);
+								if(success){
+									clearAll();
+									setStatus("Plaintext copied.");
+								}else{
+									setStatus("Copy failed. Please copy manually.");
+								}
 						    }
 						}
 						/*
@@ -572,30 +617,56 @@
 				</body>
 			</html>
         `;
+		const iframeContainer = document.getElementById('iframe-container');
+        const lockedState = document.getElementById('locked-state');
+        const unlockedState = document.getElementById('unlocked-state');
+		let inactivityTimer;
+		const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 
+		function resetInactivityTimer() {
+			clearTimeout(inactivityTimer);
+			
+			if (unlockedState.style.display !== 'none') {
+				inactivityTimer = setTimeout(() => {
+					lockVault();
+				}, INACTIVITY_TIMEOUT_MS);
+			}
+		}
+		const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+		activityEvents.forEach(evt => {
+			document.addEventListener(evt, resetInactivityTimer, { passive: true }); 
+		});
+		document.getElementById("lockVault").addEventListener("click", lockVault);
+		document.getElementById("unlockVault").addEventListener("click", unlockVault);
+		document.getElementById("copyXtoClipboard").addEventListener("click", copyXtoClipboard);
         function unlockVault() {
+			clearTimeout(inactivityTimer); 
             lockedState.style.display = 'none';
             unlockedState.style.display = 'flex';
-            
             const newFrame = document.createElement('iframe');
             newFrame.id = 'vault-frame';
             newFrame.sandbox = 'allow-scripts';
-            
+            newFrame.allow = "clipboard-write";
             iframeContainer.appendChild(newFrame);
             newFrame.srcdoc = vaultAppHTML;
         }
-
         function lockVault() {
-            // 1. Destroy the iframe. This obliterates the isolated JS heap and all strings within it.
             iframeContainer.innerHTML = '';
-            
-            // 2. Revert UI to locked state
             lockedState.style.display = 'flex';
             unlockedState.style.display = 'none';
-            
-            // 3. Extra safety: Clear the OS clipboard
-            navigator.clipboard.writeText("CLEARED").catch(() => {});
-        }
+		}
+		async function copyXtoClipboard() {
+			try {
+				await navigator.clipboard.writeText("x");
+			} catch (error) {
+				const textarea = document.getElementById('xToCopy');
+				textarea.focus();
+				textarea.select();
+				textarea.setSelectionRange(0, textarea.value.length); 
+
+				const success = document.execCommand("copy");
+			}
+		}
     </script>
 </body>
 </html>

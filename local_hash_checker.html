@@ -39,12 +39,11 @@
             <div id="name"></div>
             <pre id="hash"></pre>
             <pre id="hashPhrase"></pre>
-            <button id="open" disabled onclick="openSelectedFile()">Open file</button>
+            <button id="open" disabled>Open file</button>
         </div>
         <script>
-            let selectedFile = null;
-            let objectUrl = null;
-			const expectedHash = "9eba5bb395cc8f903c3f11d13f247aaa83a3b44d272707f4164891092b0897e8";
+			let verifiedBytes = null;
+			const expectedHash = "2a52bc8268e4120d57373161b974b6247bdf1a4e23cd20ba796b3324ae0d7f4c";
             const dropZone = document.getElementById("dropZone");
             dropZone.addEventListener("dragover", (e) => {
                 dropZone.classList.add("dragover");
@@ -56,12 +55,13 @@
                 dropZone.classList.remove("dragover");
             });
             document.getElementById("dropZone").addEventListener("change", async (event) => {
-                selectedFile = event.target.files[0];
+                let selectedFile = event.target.files[0];
                 if (!selectedFile) return;
                 document.getElementById("name").textContent =
                     "File: " + selectedFile.name;
                 const data = await selectedFile.arrayBuffer();
-                const digest = await crypto.subtle.digest("SHA-256", data);
+				verifiedBytes = new Uint8Array(data);
+                const digest = await crypto.subtle.digest("SHA-256", verifiedBytes);
                 const hash = [...new Uint8Array(digest)]
                     .map(b => b.toString(16).padStart(2, "0"))
                     .join("");
@@ -75,11 +75,10 @@
 					document.getElementById("open").disabled = false;
 				}
             });
+			document.getElementById("open").addEventListener("click", openSelectedFile);
             async function openSelectedFile() {
-				if (!selectedFile) return;
-				const bytes = await selectedFile.arrayBuffer();
-				const bytesView = new Uint8Array(bytes);
-				const html = new TextDecoder().decode(bytesView);
+				if (!verifiedBytes) return;
+				const html = new TextDecoder().decode(verifiedBytes);
 				document.open();
 				document.write(html);
 				document.close();
