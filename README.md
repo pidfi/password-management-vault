@@ -62,8 +62,8 @@ Does the hosted file match
                            │
                            ▼
                  Select encrypt_decrypt.html
-                    │
-                    ▼
+                           │
+                           ▼
                   Local checker hashes
                   encrypt_decrypt.html
                            │
