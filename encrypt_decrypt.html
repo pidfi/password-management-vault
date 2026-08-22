@@ -647,25 +647,34 @@
 		const inactivityCountdown = document.getElementById('inactivityCountdown');
 		let inactivityTimer = null;
 		let countdownInterval = null;
+		let lastActivityTime = 0;
 		const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
 		function resetInactivityTimer() {
-			stopInactivityTimer();
 			if (unlockedState.style.display === 'none') return;
-			let remaining = INACTIVITY_TIMEOUT_MS;
-			updateCountdown(remaining);
+			lastActivityTime = Date.now();
+			updateCountdown(INACTIVITY_TIMEOUT_MS);
+			clearTimeout(inactivityTimer);
+			inactivityTimer = setTimeout(lockVault, INACTIVITY_TIMEOUT_MS);
+		}
+		function startCountdown() {
+			clearTimeout(inactivityTimer);
+			clearInterval(countdownInterval);
+			lastActivityTime = Date.now();
+			inactivityTimer = setTimeout(lockVault, INACTIVITY_TIMEOUT_MS);
+			updateCountdown(INACTIVITY_TIMEOUT_MS);
 			countdownInterval = setInterval(() => {
-				remaining -= 1000;
+				const elapsed = Date.now() - lastActivityTime;
+				const remaining = INACTIVITY_TIMEOUT_MS - elapsed;
 				updateCountdown(Math.max(remaining, 0));
 			}, 1000);
-			inactivityTimer = setTimeout(() => {
-				lockVault();
-			}, INACTIVITY_TIMEOUT_MS);
 		}
 		function stopInactivityTimer() {
-			clearInterval(countdownInterval);
 			clearTimeout(inactivityTimer);
-			countdownInterval = null;
+			clearInterval(countdownInterval);
 			inactivityTimer = null;
+			countdownInterval = null;
+			lastActivityTime = 0;
+			updateCountdown(0);
 		}
 		function updateCountdown(ms) {
 			const totalSeconds = Math.ceil(ms / 1000);
@@ -675,7 +684,7 @@
 		}
 		resetAutoLockTimer.addEventListener('click', resetInactivityTimer);
 		window.addEventListener('message', event => {
-			if (event.data === 'vault-activity') {
+			if (event.origin === "null" && event.data === 'vault-activity') {
 				resetInactivityTimer();
 			}
 		});
@@ -683,7 +692,7 @@
 		document.getElementById("unlockVault").addEventListener("click", unlockVault);
 		document.getElementById("copyXtoClipboard").addEventListener("click", copyXtoClipboard);
         function unlockVault() {
-			resetInactivityTimer(); 
+			startCountdown();
             lockedState.style.display = 'none';
             unlockedState.style.display = 'flex';
             const newFrame = document.createElement('iframe');

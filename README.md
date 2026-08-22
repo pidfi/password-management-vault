@@ -352,6 +352,24 @@ JavaScript strings are immutable, making traditional in-memory scrubbing of pass
 
 When the user clicks **"Lock Vault"**, the parent document completely destroys the iframe DOM element (`innerHTML = ''`). This forces the browser to tear down the entire execution context, obliterating the isolated JavaScript heap, DOM nodes, call stack, and any lingering variables or strings. This provides robust, browser-native memory clearing that bypasses JS engine optimization quirks.
 
+### Auto-Lock Inactivity Timer
+The vault automatically locks after a period of inactivity to protect against unauthorized access if you step away from your device.
+
+**How it works:**
+- A countdown timer starts when the vault is unlocked
+- Any user interaction resets the timer:
+  - **Inside the iframe**: Whenever you type or click a button, the iframe sends a secure `postMessage` to the parent document. The parent validates the message origin (`event.origin === "null"`) to ensure it came from the trusted sandboxed iframe, then resets the timer
+  - **Parent UI**: The "Reset Auto-Lock timer" button directly calls the reset function without needing cross-frame communication
+- The countdown uses timestamp-based calculation to remain accurate even if the browser tab is backgrounded
+- When the timer expires, `lockVault()` is called, which destroys the iframe and clears all sensitive data from memory
+
+**UX Features:**
+- Real-time countdown display shows remaining time before auto-lock
+- Immediate visual feedback when activity is detected (countdown resets to full duration)
+- No performance overhead from frequent timer resets (only the timeout is reset, not the UI interval)
+
+This ensures the vault remains usable during active work while providing robust protection against accidental exposure.
+
 ### ⚠️ Clipboard Warning & Drag-and-Drop Recommendation
 The OS clipboard is a global, shared resource. Any background application, screen-recording tool, or overly privileged browser extension can read its contents the exact millisecond data is copied. 
 
