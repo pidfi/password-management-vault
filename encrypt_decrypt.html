@@ -37,17 +37,20 @@
         .btn-danger:hover { 
 			background: #a80a0a; 
 		}
-        .btn-primary { 
+        .btn-prim { 
 			background: #333; 
 		}
-        .btn-primary:hover { 
+        .btn-prim:hover { 
 			background: #555; 
 		}
-		.btn-clipboard { 
+		.btn-sec { 
 			background: #bbb; 
 		}
-        .btn-clipboard:hover { 
+        .btn-sec:hover { 
 			background: #ccc; 
+		}
+		.btn-timer {
+			margin: 5px;
 		}
         #iframe-container iframe {
             width: 100vw;
@@ -57,6 +60,7 @@
         }
 		p {
 			font-size: 18px;
+			margin: 0;
 		}
 		#unlocked-state{
 			display: none;
@@ -76,14 +80,16 @@
 	<div id="locked-state" class="statebox">
 		<div>
 			<p>The vault is currently locked. No sensitive data is in memory.</p>
-			<button id="unlockVault" class="btn btn-primary">Unlock Vault</button>
-			<button id="copyXtoClipboard" class="btn btn-clipboard">Copy 'x' to clipboard</button>
+			<button id="unlockVault" class="btn btn-prim">Unlock Vault</button>
+			<button id="copyXtoClipboard" class="btn btn-sec">Copy 'x' to clipboard</button>
 		</div>
 	</div>
 	
 	<div id="unlocked-state" class="statebox">
 		<div>
 			<button id="lockVault" class="btn btn-danger">Lock Vault</button>
+			<p>Auto-Lock in <span id="inactivityCountdown">2:00</span></p>
+			<button class="btn btn-sec btn-timer" id="resetAutoLockTimer">Reset Auto-Lock timer</button>
 			<div id="iframe-container"></div>
 		</div>
 	</div>
@@ -97,7 +103,7 @@
 				<head>
 					<meta charset="UTF-8">
 					<meta name="viewport" content="width=device-width, initial-scale=1.0">
-					<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/R9uDVyHJKMokeYObT2SdufiPBurBzzAVXNQ0mBoDmI='; style-src 'sha256-R0KyXyWfnAswDkQK+V2NyEFqUy7HyrnGR+JJ16OXsQA='; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
+					<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZYK/pRu6lBvsid+zXfJICiFqarCVC32v3WQeSGPNiRU='; style-src 'sha256-R0KyXyWfnAswDkQK+V2NyEFqUy7HyrnGR+JJ16OXsQA='; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
 					<title>Offline Vault</title>
 					<style>
 						body {
@@ -613,6 +619,24 @@
 							document.getElementById("ciphertextOutput").value = "";
 							setStatus("");
 						}
+						/*
+						 * -------------------------------------------------------
+						 * Reset auto-lock timer in parent element
+						 * -------------------------------------------------------
+						 */
+						function notifyActivity() {
+							window.parent.postMessage('vault-activity', '*');
+						}
+						document.addEventListener('click', (event) => {
+							if (event.target.closest('button')) {
+								notifyActivity();
+							}
+						});
+						document.addEventListener('input', event => {
+							if (event.target.closest('input')) {
+								notifyActivity();
+							}
+						});
 					<\/script>
 				</body>
 			</html>
@@ -620,27 +644,46 @@
 		const iframeContainer = document.getElementById('iframe-container');
         const lockedState = document.getElementById('locked-state');
         const unlockedState = document.getElementById('unlocked-state');
-		let inactivityTimer;
-		const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-
+		const inactivityCountdown = document.getElementById('inactivityCountdown');
+		let inactivityTimer = null;
+		let countdownInterval = null;
+		const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
 		function resetInactivityTimer() {
-			clearTimeout(inactivityTimer);
-			
-			if (unlockedState.style.display !== 'none') {
-				inactivityTimer = setTimeout(() => {
-					lockVault();
-				}, INACTIVITY_TIMEOUT_MS);
-			}
+			stopInactivityTimer();
+			if (unlockedState.style.display === 'none') return;
+			let remaining = INACTIVITY_TIMEOUT_MS;
+			updateCountdown(remaining);
+			countdownInterval = setInterval(() => {
+				remaining -= 1000;
+				updateCountdown(Math.max(remaining, 0));
+			}, 1000);
+			inactivityTimer = setTimeout(() => {
+				lockVault();
+			}, INACTIVITY_TIMEOUT_MS);
 		}
-		const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
-		activityEvents.forEach(evt => {
-			document.addEventListener(evt, resetInactivityTimer, { passive: true }); 
+		function stopInactivityTimer() {
+			clearInterval(countdownInterval);
+			clearTimeout(inactivityTimer);
+			countdownInterval = null;
+			inactivityTimer = null;
+		}
+		function updateCountdown(ms) {
+			const totalSeconds = Math.ceil(ms / 1000);
+			const minutes = Math.floor(totalSeconds / 60);
+			const seconds = totalSeconds % 60;
+			inactivityCountdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+		}
+		resetAutoLockTimer.addEventListener('click', resetInactivityTimer);
+		window.addEventListener('message', event => {
+			if (event.data === 'vault-activity') {
+				resetInactivityTimer();
+			}
 		});
 		document.getElementById("lockVault").addEventListener("click", lockVault);
 		document.getElementById("unlockVault").addEventListener("click", unlockVault);
 		document.getElementById("copyXtoClipboard").addEventListener("click", copyXtoClipboard);
         function unlockVault() {
-			clearTimeout(inactivityTimer); 
+			resetInactivityTimer(); 
             lockedState.style.display = 'none';
             unlockedState.style.display = 'flex';
             const newFrame = document.createElement('iframe');
@@ -651,6 +694,7 @@
             newFrame.srcdoc = vaultAppHTML;
         }
         function lockVault() {
+			stopInactivityTimer();
             iframeContainer.innerHTML = '';
             lockedState.style.display = 'flex';
             unlockedState.style.display = 'none';
@@ -663,8 +707,7 @@
 				textarea.focus();
 				textarea.select();
 				textarea.setSelectionRange(0, textarea.value.length); 
-
-				const success = document.execCommand("copy");
+				document.execCommand("copy");
 			}
 		}
     </script>
