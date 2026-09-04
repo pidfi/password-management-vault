@@ -373,7 +373,7 @@ This ensures the vault remains usable during active work while providing robust 
 ### ⚠️ Clipboard Warning & Drag-and-Drop Recommendation
 The OS clipboard is a global, shared resource. Any background application, screen-recording tool, or overly privileged browser extension can read its contents the exact millisecond data is copied. 
 
-While the "Lock Vault" function attempts to overwrite the clipboard with "CLEARED" as a hygiene measure, **this does not undo the initial exposure**. 
+While there is a button to copy "x" to the clipboard (after locking the vault) as a hygiene measure, **this does not undo the initial exposure**. 
 
 **Recommended Action**: Instead of using the "Copy" button, **highlight and Drag-and-Drop** the decrypted password directly from the input field into your target application's password field. This bypasses the OS clipboard API entirely, moving the data directly from the browser's rendering engine to the target application.
 
